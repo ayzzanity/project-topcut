@@ -220,14 +220,8 @@ The backend source of truth is `scoringService`:
 - Swiss King: `5`
 - Finisher / 2nd Place: `8`
 - Champion: `10`
-- 3rd Place: `5`
-- 4th Place: `4`
-- 5th Place: `3`
-- 6th Place: `2`
-- 7th Place: `1`
-- 8th Place: `1`
 
-Champion, 2nd, 3rd, 4th, 5th, 6th, 7th, and 8th are mutually exclusive. Swiss King and Champion can stack. Top Cut entry and final placement can stack. Placement points are only awarded when Challonge provides a confirmed `final_rank` for that placement.
+Champion and 2nd are mutually exclusive placement bonuses. Swiss King and Champion can stack. Top Cut entry and final placement can stack. Placement points are only awarded when Challonge provides a confirmed `final_rank` of 1 or 2.
 
 ## Confirm Import Transaction Flow
 

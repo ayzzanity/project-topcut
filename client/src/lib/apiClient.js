@@ -46,6 +46,7 @@ export async function apiRequest(path, options = {}) {
 
 export const api = {
   getImportedTournamentSources: () => apiRequest('/api/imports/sources'),
+  getImportedTournamentDetails: (sourceId) => apiRequest(`/api/imports/sources/${sourceId}`),
   fetchParticipants: (mainLink) =>
     apiRequest('/api/imports/participants', {
       method: 'POST',

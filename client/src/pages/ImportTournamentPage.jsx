@@ -1,4 +1,5 @@
 import {
+  ArrowLeftOutlined,
   CheckCircleOutlined,
   DatabaseOutlined,
   EyeOutlined,
@@ -9,16 +10,35 @@ import {
   TrophyOutlined,
   UserOutlined
 } from '@ant-design/icons';
-import { Alert, Button, Card, Collapse, Form, Input, Result, Segmented, Select, Space, Table, Tag, Typography } from 'antd';
-import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import {
+  Alert,
+  Button,
+  Card,
+  Collapse,
+  Empty,
+  Form,
+  Input,
+  Result,
+  Segmented,
+  Select,
+  Space,
+  Statistic,
+  Table,
+  Tag,
+  Typography
+} from 'antd';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import PageBreadcrumb from '../components/PageBreadcrumb.jsx';
 import ResponsiveTableWrapper from '../components/ResponsiveTableWrapper.jsx';
 import StatusTag from '../components/StatusTag.jsx';
 import { api } from '../lib/apiClient.js';
-import { formatPlacement, titleize } from '../utils/formatters.js';
+import { formatDate, formatPlacement, titleize } from '../utils/formatters.js';
 
 export default function ImportTournamentPage() {
   const [form] = Form.useForm();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [participantsPayload, setParticipantsPayload] = useState(null);
   const [preview, setPreview] = useState(null);
   const [confirmation, setConfirmation] = useState(null);
@@ -31,6 +51,8 @@ export default function ImportTournamentPage() {
   const [sourceError, setSourceError] = useState(null);
   const [mainSourceMode, setMainSourceMode] = useState('link');
   const [topCutSourceMode, setTopCutSourceMode] = useState('link');
+  const [showImportFlow, setShowImportFlow] = useState(false);
+  const [claimIntentHandled, setClaimIntentHandled] = useState(false);
   const selectedMainSourceId = Form.useWatch('mainSourceId', form);
 
   useEffect(() => {
@@ -46,6 +68,29 @@ export default function ImportTournamentPage() {
 
     loadImportedSources();
   }, []);
+
+  useEffect(() => {
+    const claimSourceId = location.state?.claimSourceId;
+    const claimParticipantId = location.state?.claimParticipantId;
+    if (claimIntentHandled || loadingSources || !claimSourceId) return;
+
+    const source = importedSources.find((item) => item.id === claimSourceId);
+    if (!source) return;
+
+    setShowImportFlow(true);
+    setMainSourceMode('imported');
+    setTopCutSourceMode('link');
+    form.setFieldsValue({
+      mainSourceId: claimSourceId,
+      mainLink: source.challongeUrl,
+      topCutSourceId: undefined,
+      topCutLink: undefined,
+      mainParticipantId: undefined
+    });
+    clearLoadedImport();
+    setClaimIntentHandled(true);
+    loadParticipants(source.challongeUrl, claimParticipantId);
+  }, [claimIntentHandled, form, importedSources, loadingSources, location.state]);
 
   function clearLoadedImport() {
     setParticipantsPayload(null);
@@ -129,12 +174,28 @@ export default function ImportTournamentPage() {
     setConfirmation(null);
     setParticipantsPayload(null);
     form.setFieldValue('mainParticipantId', undefined);
-    setLoadingParticipants(true);
 
     try {
       const values = await validateMainSource();
-      const payload = await api.fetchParticipants(values.mainLink);
+      await loadParticipants(values.mainLink);
+    } catch (nextError) {
+      setError(nextError);
+    }
+  }
+
+  async function loadParticipants(mainLink, preselectParticipantId = null) {
+    setLoadingParticipants(true);
+
+    try {
+      const payload = await api.fetchParticipants(mainLink);
       setParticipantsPayload(payload);
+
+      if (preselectParticipantId) {
+        const participant = payload.participants?.find((item) => item.challongeParticipantId === preselectParticipantId);
+        if (participant && !participant.claimed && !participant.disabled) {
+          form.setFieldValue('mainParticipantId', preselectParticipantId);
+        }
+      }
     } catch (nextError) {
       setError(nextError);
     } finally {
@@ -179,39 +240,52 @@ export default function ImportTournamentPage() {
     setPreview(null);
     setConfirmation(null);
     setError(null);
+    setShowImportFlow(false);
   }
 
   const currentStep = preview ? 3 : participantsPayload ? 2 : 1;
-  const mainSources = importedSources.filter((source) => source.sourceType === 'main');
-  const topCutSources = importedSources.filter((source) => source.sourceType === 'top_cut');
+  const mainSources = importedSources.filter((source) => source.sourceType === 'main' && !isTopCutSource(source));
+  const topCutSources = importedSources.filter((source) => source.sourceType === 'top_cut' || isTopCutSource(source));
   const selectedMainSource = mainSources.find((source) => source.id === selectedMainSourceId);
   const topCutSourcesForSelectedMain = selectedMainSource
-    ? topCutSources.filter((source) => source.tournamentId === selectedMainSource.tournamentId)
+    ? topCutSources.filter((source) => isLinkedTopCutSource(selectedMainSource, source))
     : [];
   const sourceOptions = (sources) =>
     sources.map((source) => ({
       value: source.id,
-      searchText: `${source.tournamentName} ${source.sourceName || ''} ${source.tournamentDate || ''}`,
+      searchText: source.tournamentName + ' ' + (source.sourceName || '') + ' ' + (source.tournamentDate || ''),
       plainLabel: source.tournamentName,
       label: (
         <div className="bbx-import-source-option">
           <strong>{source.tournamentName}</strong>
           <span>
             {source.tournamentDate || 'Date not provided'}
-            {source.sourceName && source.sourceName !== source.tournamentName ? ` · ${source.sourceName}` : ''}
+            {source.sourceName && source.sourceName !== source.tournamentName ? ' - ' + source.sourceName : ''}
           </span>
         </div>
       )
     }));
 
-  return (
-    <div className="bbx-import-page">
-      {confirmation ? (
+  const tournamentCatalog = useMemo(() => buildTournamentCatalog(mainSources, topCutSources), [mainSources, topCutSources]);
+  const casualTournaments = tournamentCatalog.filter((item) => item.queueType === 'casual');
+  const rankedTournaments = tournamentCatalog.filter((item) => item.queueType === 'ranked');
+  const latestTournaments = [...casualTournaments].sort(sortTournamentsByLatest);
+  const totalTournamentCount = tournamentCatalog.length;
+
+  if (confirmation) {
+    return (
+      <div className="bbx-import-page">
+        <PageBreadcrumb items={[{ label: 'Tournaments', to: '/tournaments' }, { label: 'Import Submitted' }]} />
+
         <Result
           status="success"
           icon={<CheckCircleOutlined />}
           title="Import submitted for admin review"
-          subTitle={`This result is currently ${titleize(confirmation.status)}. It will appear on your profile and the leaderboard as unverified, then count as verified after admin review.`}
+          subTitle={
+            'This result is currently ' +
+            titleize(confirmation.status) +
+            '. It will appear on your profile and the leaderboard as unverified, then count as verified after admin review.'
+          }
           extra={[
             <Button key="leaderboard" type="primary">
               <Link to="/leaderboard">View Leaderboard</Link>
@@ -220,206 +294,385 @@ export default function ImportTournamentPage() {
               <Link to="/profile">View My Profile</Link>
             </Button>,
             <Button key="again" icon={<ReloadOutlined />} onClick={resetFlow}>
-              Import Another
+              Back to Tournaments
             </Button>
           ]}
         />
-      ) : (
-        <div className="bbx-import-grid">
-          <div className="min-w-0">
-            <ImportStepBar currentStep={currentStep} />
+      </div>
+    );
+  }
 
-            <Card className="bbx-card bbx-import-form-card">
-              {error ? <Alert className="mb-5" type="error" showIcon message={error.message} /> : null}
+  if (!showImportFlow) {
+    return (
+      <div className="bbx-import-page space-y-5">
+        <PageBreadcrumb items={[{ label: 'Tournaments' }]} />
 
-              <Form className="bbx-import-form" form={form} layout="vertical">
-                <SectionHeading icon={<CheckCircleOutlined />} title="Tournament Links" />
+        <section className="grid gap-4 md:grid-cols-3">
+          <TournamentStatCard icon={<TrophyOutlined />} label="Total Tournaments" value={totalTournamentCount} />
+          <TournamentStatCard icon={<TeamOutlined />} label="Casual" value={casualTournaments.length} />
+          <TournamentStatCard icon={<FireOutlined />} label="Ranked" value={rankedTournaments.length} />
+        </section>
 
-                <div className="bbx-import-source-picker">
-                  <div className="bbx-import-source-picker-label">Main / Swiss tournament</div>
-                  <Segmented
-                    block
-                    value={mainSourceMode}
-                    onChange={handleMainSourceModeChange}
-                    options={[
-                      { label: 'Challonge Link', value: 'link', icon: <LinkOutlined /> },
-                      { label: 'Imported Tournament', value: 'imported', icon: <DatabaseOutlined /> }
-                    ]}
+        <Card
+          className="bbx-card"
+          title={`Tournament List (${latestTournaments.length})`}
+          extra={
+            <Button type="primary" icon={<DatabaseOutlined />} onClick={() => setShowImportFlow(true)}>
+              Import Tournament
+            </Button>
+          }
+        >
+          {sourceError ? (
+            <Alert type="error" showIcon message={sourceError.message} />
+          ) : loadingSources ? (
+            <div className="flex min-h-48 items-center justify-center gap-3">
+              <ReloadOutlined className="text-bbx-red" spin />
+              <span className="text-bbx-muted">Loading tournaments...</span>
+            </div>
+          ) : latestTournaments.length ? (
+            <ResponsiveTableWrapper>
+              <Table
+                className="bbx-tournament-list-table"
+                size="small"
+                rowKey="tournamentId"
+                dataSource={latestTournaments}
+                onRow={(record) => ({
+                  onClick: () => navigate(`/tournaments/${record.sourceId}`),
+                  tabIndex: 0,
+                  role: 'button',
+                  onKeyDown: (event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      navigate(`/tournaments/${record.sourceId}`);
+                    }
+                  }
+                })}
+                pagination={latestTournaments.length > 10 ? { pageSize: 10, showSizeChanger: false } : false}
+                scroll={{ x: 860 }}
+                columns={[
+                  {
+                    title: 'Tournament',
+                    dataIndex: 'tournamentName',
+                    render: (value, record) => (
+                      <div>
+                        <div className="font-black text-bbx-ink">{value}</div>
+                        <div className="bbx-tournament-participant-count">{record.participantCount} participants</div>
+                      </div>
+                    )
+                  },
+                  {
+                    title: 'Type',
+                    dataIndex: 'queueType',
+                    render: (value) => <Tag color={value === 'ranked' ? 'volcano' : 'blue'}>{titleize(value)}</Tag>
+                  },
+                  { title: 'Event Date', dataIndex: 'tournamentDate', render: formatDate }
+                ]}
+              />
+            </ResponsiveTableWrapper>
+          ) : (
+            <Empty description="No casual tournaments have been imported yet." />
+          )}
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bbx-import-page">
+      <PageBreadcrumb items={[{ label: 'Tournaments', to: '/tournaments' }, { label: 'Import Tournament' }]} />
+
+      <div className="mb-4 flex justify-end">
+        <Button icon={<ArrowLeftOutlined />} onClick={resetFlow}>
+          Back to Tournaments
+        </Button>
+      </div>
+
+      <div className="bbx-import-grid">
+        <div className="min-w-0">
+          <ImportStepBar currentStep={currentStep} />
+
+          <Card className="bbx-card bbx-import-form-card">
+            {error ? <Alert className="mb-5" type="error" showIcon message={error.message} /> : null}
+
+            <Form className="bbx-import-form" form={form} layout="vertical">
+              <SectionHeading icon={<CheckCircleOutlined />} title="Tournament Links" />
+
+              <div className="bbx-import-source-picker">
+                <div className="bbx-import-source-picker-label">Main / Swiss tournament</div>
+                <Segmented
+                  block
+                  value={mainSourceMode}
+                  onChange={handleMainSourceModeChange}
+                  options={[
+                    { label: 'Challonge Link', value: 'link', icon: <LinkOutlined /> },
+                    { label: 'Imported Tournament', value: 'imported', icon: <DatabaseOutlined /> }
+                  ]}
+                />
+              </div>
+
+              {mainSourceMode === 'link' ? (
+                <Form.Item
+                  label="Challonge link"
+                  name="mainLink"
+                  rules={[{ required: true, message: 'Paste the main Challonge link.' }]}
+                >
+                  <Input prefix={<LinkOutlined />} placeholder="https://challonge.com/..." />
+                </Form.Item>
+              ) : (
+                <Form.Item
+                  label="Imported tournament"
+                  name="mainSourceId"
+                  rules={[{ required: true, message: 'Select an imported tournament.' }]}
+                >
+                  <Select
+                    showSearch
+                    loading={loadingSources}
+                    optionFilterProp="searchText"
+                    optionLabelProp="plainLabel"
+                    placeholder="Search imported tournaments"
+                    options={sourceOptions(mainSources)}
+                    notFoundContent={sourceError ? 'Could not load imported tournaments' : 'No imported tournaments yet'}
+                    onChange={(sourceId) => selectImportedSource('mainSourceId', 'mainLink', sourceId)}
                   />
-                </div>
+                </Form.Item>
+              )}
 
-                {mainSourceMode === 'link' ? (
+              <Collapse
+                className="bbx-top-cut-collapse"
+                ghost
+                items={[
+                  {
+                    key: 'top-cut',
+                    label: 'Add Top Cut / Final Stage',
+                    children: (
+                      <>
+                        <Segmented
+                          className="mb-3"
+                          block
+                          value={topCutSourceMode}
+                          onChange={handleTopCutSourceModeChange}
+                          options={[
+                            { label: 'Challonge Link', value: 'link', icon: <LinkOutlined /> },
+                            { label: 'Imported Tournament', value: 'imported', icon: <DatabaseOutlined /> }
+                          ]}
+                        />
+                        {topCutSourceMode === 'link' ? (
+                          <Form.Item
+                            name="topCutLink"
+                            extra="Optional. This is treated as the final stage for the same tournament, not a separate tournament."
+                          >
+                            <Input prefix={<LinkOutlined />} placeholder="Optional same-tournament final stage link" />
+                          </Form.Item>
+                        ) : (
+                          <Form.Item
+                            name="topCutSourceId"
+                            extra="Optional. Select a previously imported Top Cut source for this same tournament."
+                          >
+                            <Select
+                              allowClear
+                              showSearch
+                              loading={loadingSources}
+                              disabled={!selectedMainSource}
+                              optionFilterProp="searchText"
+                              optionLabelProp="plainLabel"
+                              placeholder={
+                                selectedMainSource
+                                  ? 'Select linked Top Cut source'
+                                  : 'Select an imported main tournament first'
+                              }
+                              options={sourceOptions(topCutSourcesForSelectedMain)}
+                              notFoundContent={
+                                sourceError
+                                  ? 'Could not load imported tournaments'
+                                  : 'No linked Top Cut source for this tournament'
+                              }
+                              onChange={(sourceId) => selectImportedSource('topCutSourceId', 'topCutLink', sourceId)}
+                              onClear={() => form.setFieldValue('topCutLink', undefined)}
+                            />
+                          </Form.Item>
+                        )}
+                      </>
+                    )
+                  }
+                ]}
+              />
+
+              <Button
+                className="mt-3"
+                type="primary"
+                icon={<TeamOutlined />}
+                loading={loadingParticipants}
+                onClick={fetchParticipants}
+              >
+                Fetch Participants
+              </Button>
+
+              {participantsPayload ? (
+                <div className="mt-5">
+                  <SectionHeading icon={<TrophyOutlined />} title="Imported Tournament" subtle />
+                  {participantsPayload.alreadyImportedByUser ? (
+                    <Alert
+                      className="bbx-import-user-warning mb-2"
+                      type="warning"
+                      showIcon
+                      message="You already imported this tournament."
+                    />
+                  ) : null}
+                  <Alert
+                    className="bbx-import-source-alert mb-5"
+                    type="info"
+                    showIcon
+                    message={
+                      '[' +
+                      participantsPayload.source?.tournamentDate +
+                      '] ' +
+                      participantsPayload.source?.name +
+                      ' - ' +
+                      (participantsPayload.source?.participantCount || participantsPayload.participants?.length || 0) +
+                      ' participants'
+                    }
+                  />
+
+                  <SectionHeading icon={<UserOutlined />} title="Your participant name" subtle />
                   <Form.Item
-                    label="Challonge link"
-                    name="mainLink"
-                    rules={[{ required: true, message: 'Paste the main Challonge link.' }]}
-                  >
-                    <Input prefix={<LinkOutlined />} placeholder="https://challonge.com/..." />
-                  </Form.Item>
-                ) : (
-                  <Form.Item
-                    label="Imported tournament"
-                    name="mainSourceId"
-                    rules={[{ required: true, message: 'Select an imported tournament.' }]}
+                    name="mainParticipantId"
+                    rules={[{ required: true, message: 'Select the participant name you used.' }]}
                   >
                     <Select
                       showSearch
-                      loading={loadingSources}
                       optionFilterProp="searchText"
-                      optionLabelProp="plainLabel"
-                      placeholder="Search imported tournaments"
-                      options={sourceOptions(mainSources)}
-                      notFoundContent={sourceError ? 'Could not load imported tournaments' : 'No imported tournaments yet'}
-                      onChange={(sourceId) => selectImportedSource('mainSourceId', 'mainLink', sourceId)}
+                      placeholder="Select your Challonge participant"
+                      options={[...(participantsPayload.participants || [])]
+                        .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true }))
+                        .map((participant) => ({
+                          value: participant.challongeParticipantId,
+                          disabled: participant.disabled || participant.claimed,
+                          searchText: participant.name,
+                          label: (
+                            <div className="flex items-center justify-between gap-3">
+                              <span className={participant.claimed ? 'text-bbx-muted' : 'font-semibold text-bbx-ink'}>
+                                {participant.name}
+                              </span>
+                              {participant.claimed ? (
+                                <StatusTag status="claimed">Already claimed</StatusTag>
+                              ) : (
+                                <StatusTag status="available">Available</StatusTag>
+                              )}
+                            </div>
+                          )
+                        }))}
                     />
                   </Form.Item>
-                )}
-                <Collapse
-                  className="bbx-top-cut-collapse"
-                  ghost
-                  items={[
-                    {
-                      key: 'top-cut',
-                      label: 'Add Top Cut / Final Stage',
-                      children: (
-                        <>
-                          <Segmented
-                            className="mb-3"
-                            block
-                            value={topCutSourceMode}
-                            onChange={handleTopCutSourceModeChange}
-                            options={[
-                              { label: 'Challonge Link', value: 'link', icon: <LinkOutlined /> },
-                              { label: 'Imported Tournament', value: 'imported', icon: <DatabaseOutlined /> }
-                            ]}
-                          />
-                          {topCutSourceMode === 'link' ? (
-                            <Form.Item
-                              name="topCutLink"
-                              extra="Optional. This is treated as the final stage for the same tournament, not a separate event."
-                            >
-                              <Input prefix={<LinkOutlined />} placeholder="Optional same-tournament final stage link" />
-                            </Form.Item>
-                          ) : (
-                            <Form.Item
-                              name="topCutSourceId"
-                              extra="Optional. Select a previously imported Top Cut source for this same tournament."
-                            >
-                              <Select
-                                allowClear
-                                showSearch
-                                loading={loadingSources}
-                                disabled={!selectedMainSource}
-                                optionFilterProp="searchText"
-                                optionLabelProp="plainLabel"
-                                placeholder={
-                                  selectedMainSource
-                                    ? 'Select linked Top Cut source'
-                                    : 'Select an imported main tournament first'
-                                }
-                                options={sourceOptions(topCutSourcesForSelectedMain)}
-                                notFoundContent={
-                                  sourceError
-                                    ? 'Could not load imported tournaments'
-                                    : 'No linked Top Cut source for this tournament'
-                                }
-                                onChange={(sourceId) => selectImportedSource('topCutSourceId', 'topCutLink', sourceId)}
-                                onClear={() => form.setFieldValue('topCutLink', undefined)}
-                              />
-                            </Form.Item>
-                          )}
-                        </>
-                      )
-                    }
-                  ]}
-                />
-
-                <Button
-                  className="mt-3"
-                  type="primary"
-                  icon={<TeamOutlined />}
-                  loading={loadingParticipants}
-                  onClick={fetchParticipants}
-                >
-                  Fetch Participants
-                </Button>
-
-                {participantsPayload ? (
-                  <div className="mt-5">
-                    <SectionHeading icon={<TrophyOutlined />} title="Imported Tournament" subtle />
-                    {participantsPayload.alreadyImportedByUser ? (
-                      <Alert
-                        className="bbx-import-user-warning mb-2"
-                        type="warning"
-                        showIcon
-                        message={`You already imported this tournament.`}
-                      />
-                    ) : null}
-                    <Alert
-                      className="bbx-import-source-alert mb-5"
-                      type="info"
-                      showIcon
-                      message={
-                        `[${participantsPayload.source?.tournamentDate}] ${participantsPayload.source?.name} - ${participantsPayload.source?.participantCount || participantsPayload.participants?.length || 0} participants` ||
-                        'Participants loaded'
-                      }
-                    />
-
-                    <SectionHeading icon={<UserOutlined />} title="Your participant name" subtle />
-                    <Form.Item
-                      name="mainParticipantId"
-                      rules={[{ required: true, message: 'Select the participant name you used.' }]}
-                    >
-                      <Select
-                        showSearch
-                        optionFilterProp="searchText"
-                        placeholder="Select your Challonge participant"
-                        options={[...(participantsPayload.participants || [])]
-                          .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true }))
-                          .map((participant) => ({
-                            value: participant.challongeParticipantId,
-                            disabled: participant.disabled || participant.claimed,
-                            searchText: participant.name,
-                            label: (
-                              <div className="flex items-center justify-between gap-3">
-                                <span className={participant.claimed ? 'text-bbx-muted' : 'font-semibold text-bbx-ink'}>
-                                  {participant.name}
-                                </span>
-                                {participant.claimed ? (
-                                  <StatusTag status="claimed">Already claimed</StatusTag>
-                                ) : (
-                                  <StatusTag status="available">Available</StatusTag>
-                                )}
-                              </div>
-                            )
-                          }))}
-                      />
-                    </Form.Item>
-                    <Button
-                      className="bbx-outline-button"
-                      icon={<EyeOutlined />}
-                      loading={loadingPreview}
-                      onClick={previewResult}
-                    >
-                      Preview Result
-                    </Button>
-                  </div>
-                ) : null}
-              </Form>
-            </Card>
-          </div>
-
-          <Card className="bbx-card bbx-import-preview-card self-start xl:sticky xl:top-24" title="Scoring Preview">
-            {preview ? (
-              <PreviewPanel preview={preview} confirming={confirming} onConfirm={confirmImport} />
-            ) : (
-              <EmptyPreview />
-            )}
+                  <Button
+                    className="bbx-outline-button"
+                    icon={<EyeOutlined />}
+                    loading={loadingPreview}
+                    onClick={previewResult}
+                  >
+                    Preview Result
+                  </Button>
+                </div>
+              ) : null}
+            </Form>
           </Card>
         </div>
-      )}
+
+        <Card className="bbx-card bbx-import-preview-card self-start xl:sticky xl:top-24" title="Scoring Preview">
+          {preview ? <PreviewPanel preview={preview} confirming={confirming} onConfirm={confirmImport} /> : <EmptyPreview />}
+        </Card>
+      </div>
     </div>
   );
+}
+
+function TournamentStatCard({ icon, label, value }) {
+  return (
+    <Card className="bbx-card">
+      <div className="flex items-center gap-4">
+        <div className="flex h-11 w-11 items-center justify-center rounded-full bg-red-50 text-xl text-bbx-red">{icon}</div>
+        <div>
+          <div className="text-xs font-black uppercase text-bbx-muted">{label}</div>
+          <Statistic value={value} valueStyle={{ color: '#171717', fontSize: 30, fontWeight: 900, lineHeight: 1 }} />
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function buildTournamentCatalog(mainSources, topCutSources) {
+  const tournamentsById = new Map();
+
+  for (const source of mainSources) {
+    if (tournamentsById.has(source.tournamentId)) continue;
+    tournamentsById.set(source.tournamentId, {
+      tournamentId: source.tournamentId,
+      sourceId: source.id,
+      tournamentName: source.tournamentName,
+      sourceName: source.sourceName,
+      tournamentDate: source.tournamentDate,
+      tournamentStatus: source.tournamentStatus,
+      importedAt: source.importedAt,
+      challongeUrl: source.challongeUrl,
+      participantCount: source.participantCount || 0,
+      queueType: inferQueueType(source),
+      hasTopCut: Boolean(findLinkedTopCutSource(source, topCutSources))
+    });
+  }
+
+  return [...tournamentsById.values()].sort(sortTournamentsByLatest);
+}
+
+function findLinkedTopCutSource(mainSource, topCutSources) {
+  return topCutSources.find((source) => isLinkedTopCutSource(mainSource, source)) || null;
+}
+
+function isLinkedTopCutSource(mainSource, topCutSource) {
+  if (topCutSource.linkedMainSourceId === mainSource.id) return true;
+  if (topCutSource.tournamentId === mainSource.tournamentId) return true;
+
+  const mainTokens = meaningfulTournamentTokens(mainSource);
+  const topCutTokens = meaningfulTournamentTokens(topCutSource);
+  if (!mainTokens.length || !topCutTokens.length) return false;
+
+  const matchedTokens = topCutTokens.filter((token) => mainTokens.includes(token));
+  return matchedTokens.length >= Math.min(2, mainTokens.length);
+}
+
+function inferQueueType(source) {
+  const explicitType = String(source.tournamentType || '').toLowerCase();
+  if (explicitType === 'ranked') return 'ranked';
+  if (explicitType === 'casual') return 'casual';
+
+  const haystack = (source.tournamentName || '') + ' ' + (source.sourceName || '');
+  return haystack.toLowerCase().includes('ranked') ? 'ranked' : 'casual';
+}
+
+function isTopCutSource(source) {
+  if (source.linkedMainSourceId) return true;
+  if (source.sourceType === 'top_cut') return true;
+
+  const haystack = (source.tournamentName || '') + ' ' + (source.sourceName || '');
+  return /\b(top\s*cut|topcut|final\s*stage|finals?)\b/i.test(haystack);
+}
+
+function meaningfulTournamentTokens(source) {
+  const stopWords = new Set(['top', 'cut', 'topcut', 'final', 'finals', 'stage', 'bracket', 'the', 'a', 'an']);
+
+  return (source.tournamentName + ' ' + (source.sourceName || ''))
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter((token) => token.length > 2 && !stopWords.has(token));
+}
+
+function sortTournamentsByLatest(a, b) {
+  return timestampFromTournament(b) - timestampFromTournament(a);
+}
+
+function timestampFromTournament(record) {
+  const value = record?.tournamentDate || record?.importedAt;
+  const timestamp = value ? new Date(value).getTime() : 0;
+  return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
 function ImportStepBar({ currentStep }) {
@@ -488,14 +741,14 @@ function PreviewPanel({ preview, confirming, onConfirm }) {
       <div className="grid gap-3">
         <PreviewStatCard icon={<TrophyOutlined />} label="Total Points" value={preview.totalPoints || 0} featured />
         <div className="grid grid-cols-2 gap-3">
-          <PreviewStatCard icon={<FireOutlined />} label="Match Wins" value={preview.validWins || 0} />
+          <PreviewStatCard icon={<FireOutlined />} label="Round Wins" value={preview.validWins || 0} />
           <PreviewStatCard label="Placement" value={formatPlacement(preview.finalPlacement)} />
         </div>
       </div>
 
       <Card size="small" className="bbx-import-summary-card">
         <SummaryRow label="Player" value={preview.selectedParticipant?.name} />
-        <SummaryRow label="Main event" value={preview.main?.name} />
+        <SummaryRow label="Main tournament" value={preview.main?.name} />
         <SummaryRow label="Tournament date" value={preview.main?.tournamentDate || 'Not provided'} />
         <SummaryRow label="Top Cut" value={preview.topCut?.name || 'None provided'} />
         <SummaryRow label="Swiss record" value={swissRecordText} />

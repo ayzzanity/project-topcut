@@ -1,19 +1,21 @@
 import {
+  BarChartOutlined,
   CalendarOutlined,
   CrownOutlined,
   DownOutlined,
   FilterOutlined,
-  ReloadOutlined,
   SearchOutlined,
   StarFilled,
+  TeamOutlined,
   TrophyOutlined
 } from '@ant-design/icons';
-import { Button, Card, Dropdown, Segmented, Select, Space, Table } from 'antd';
+import { Button, Card, Divider, Dropdown, Empty, Segmented, Select, Spin, Table } from 'antd';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import PageBreadcrumb from '../components/PageBreadcrumb.jsx';
 import RankingBadge from '../components/RankingBadge.jsx';
 import ResponsiveTableWrapper from '../components/ResponsiveTableWrapper.jsx';
-import { EmptyCard, ErrorCard, LoadingCard } from '../components/StateCard.jsx';
+import { ErrorCard } from '../components/StateCard.jsx';
 import { api } from '../lib/apiClient.js';
 import { formatDate } from '../utils/formatters.js';
 
@@ -36,6 +38,7 @@ export default function LeaderboardPage() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [queueType, setQueueType] = useState('casual');
   const [mode, setMode] = useState('overall');
   const [customYear, setCustomYear] = useState(currentManilaYear());
   const [customMonth, setCustomMonth] = useState(undefined);
@@ -68,9 +71,6 @@ export default function LeaderboardPage() {
     loadLeaderboard();
   }, []);
 
-  if (loading) return <LoadingCard message="Loading leaderboard..." />;
-  if (error) return <ErrorCard error={error} onRetry={loadLeaderboard} />;
-
   const currentYear = currentManilaYear();
   const currentMonth = currentManilaMonth();
   const yearOptions = buildYearOptions(currentYear);
@@ -91,19 +91,77 @@ export default function LeaderboardPage() {
 
   return (
     <div className="bbx-leaderboard-page">
-      <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <Segmented
-          className="bbx-leaderboard-mode-toggle"
-          value={mode === 'current-year' || mode === 'current-month' ? mode : 'overall'}
-          options={[
-            { label: 'OVERALL', value: 'overall' },
-            { label: currentYear, value: 'current-year' },
-            { label: currentMonth.shortLabel.toUpperCase(), value: 'current-month' }
-          ]}
-          onChange={(value) => handleQuickFilter(value)}
-        />
+      <PageBreadcrumb items={[{ label: 'Leaderboard' }]} />
 
-        <Space wrap size={10} className="bbx-leaderboard-header-actions">
+      <div className="bbx-leaderboard-filterbar">
+        <div className="bbx-leaderboard-filterbar-group">
+          <Segmented
+            className="bbx-leaderboard-queue-toggle"
+            value={queueType}
+            options={[
+              {
+                label: (
+                  <span className="bbx-leaderboard-filter-option">
+                    <TeamOutlined />
+                    <span>Casual</span>
+                  </span>
+                ),
+                value: 'casual'
+              },
+              {
+                label: (
+                  <span className="bbx-leaderboard-filter-option">
+                    <TrophyOutlined />
+                    <span>Ranked</span>
+                  </span>
+                ),
+                value: 'ranked'
+              }
+            ]}
+            onChange={(value) => setQueueType(value)}
+          />
+        </div>
+
+        <Divider type="vertical" className="bbx-leaderboard-filter-divider" />
+
+        <div className="bbx-leaderboard-filterbar-group">
+          <Segmented
+            className="bbx-leaderboard-mode-toggle"
+            value={mode === 'current-year' || mode === 'current-month' ? mode : 'overall'}
+            options={[
+              {
+                label: (
+                  <span className="bbx-leaderboard-filter-option">
+                    <BarChartOutlined />
+                    <span>Overall</span>
+                  </span>
+                ),
+                value: 'overall'
+              },
+              {
+                label: (
+                  <span className="bbx-leaderboard-filter-option">
+                    <CalendarOutlined />
+                    <span>{currentYear}</span>
+                  </span>
+                ),
+                value: 'current-year'
+              },
+              {
+                label: (
+                  <span className="bbx-leaderboard-filter-option">
+                    <CalendarOutlined />
+                    <span>{currentMonth.shortLabel}</span>
+                  </span>
+                ),
+                value: 'current-month'
+              }
+            ]}
+            onChange={(value) => handleQuickFilter(value)}
+          />
+        </div>
+
+        <div className="bbx-leaderboard-header-actions">
           <Dropdown
             trigger={['click']}
             placement="bottomRight"
@@ -137,70 +195,81 @@ export default function LeaderboardPage() {
             <Button
               type={mode === 'custom' ? 'primary' : 'default'}
               className={mode === 'custom' ? undefined : 'bbx-outline-button'}
-              icon={<FilterOutlined />}
+              icon={<CalendarOutlined />}
             >
-              Specific Period <DownOutlined />
+              Custom Range <DownOutlined />
             </Button>
           </Dropdown>
-          <Button className="bbx-outline-button" icon={<ReloadOutlined />} onClick={loadLeaderboard}>
-            Refresh
-          </Button>
-        </Space>
+        </div>
       </div>
 
-      <section className="bbx-podium-grid mb-5">
-        <PodiumCard player={topPlayers[1]} rank={2} />
-        <PodiumCard player={topPlayers[0]} rank={1} featured />
-        <PodiumCard player={topPlayers[2]} rank={3} />
-      </section>
+      <Card className="bbx-card bbx-leaderboard-shell">
 
-      {rows.length === 0 ? (
-        <EmptyCard description={`No tournament results found for ${summaryLabel.toLowerCase()}.`} />
-      ) : (
-        <Card className="bbx-card bbx-leaderboard-table-card">
-          <ResponsiveTableWrapper>
-            <Table
-              rowKey="user_id"
-              dataSource={rankedRows}
-              scroll={{ x: 980 }}
-              pagination={rankedRows.length > 10 ? { pageSize: 10, showSizeChanger: false } : false}
-              columns={[
-                {
-                  title: 'Rank',
-                  dataIndex: 'rank',
-                  width: 100,
-                  render: (rank) => <RankingBadge rank={rank} />
-                },
-                {
-                  title: 'Player',
-                  dataIndex: 'display_name',
-                  sorter: (a, b) => a.display_name.localeCompare(b.display_name),
-                  render: (value, record) => <PlayerCell name={value} userId={record.user_id} />
-                },
-                {
-                  title: 'Points',
-                  dataIndex: 'total_points',
-                  sorter: (a, b) => a.total_points - b.total_points,
-                  render: (value, record) => <PointsDisplay total={value} verified={record.verified_points} />
-                },
-                { title: 'Champion', dataIndex: 'champion_count' },
-                { title: 'Swiss King', dataIndex: 'swiss_king_count' },
-                { title: 'Match Wins', dataIndex: 'total_valid_wins' },
-                {
-                  title: 'Events',
-                  dataIndex: 'tournament_count',
-                  render: (value, record) => `${value || 0} (${record.approved_tournament_count || 0} verified)`
-                },
-                {
-                  title: 'Most Recent',
-                  dataIndex: 'most_recent_tournament_date',
-                  render: formatDate
-                }
-              ]}
-            />
-          </ResponsiveTableWrapper>
-        </Card>
-      )}
+        {loading ? (
+          <div className="flex min-h-40 items-center justify-center gap-3 py-8">
+            <Spin />
+            <span className="text-bbx-muted">Loading leaderboard...</span>
+          </div>
+        ) : error ? (
+          <ErrorCard error={error} onRetry={loadLeaderboard} />
+        ) : rows.length === 0 ? (
+          <div className="py-10">
+            <Empty description={`No tournament results found for ${summaryLabel.toLowerCase()}.`} />
+          </div>
+        ) : (
+          <>
+            <section className="bbx-podium-grid mb-5">
+              <PodiumCard player={topPlayers[1]} rank={2} />
+              <PodiumCard player={topPlayers[0]} rank={1} featured />
+              <PodiumCard player={topPlayers[2]} rank={3} />
+            </section>
+
+            <div className="bbx-leaderboard-table-card">
+              <ResponsiveTableWrapper>
+                <Table
+                  rowKey="user_id"
+                  dataSource={rankedRows}
+                  scroll={{ x: 980 }}
+                  pagination={rankedRows.length > 10 ? { pageSize: 10, showSizeChanger: false } : false}
+                  columns={[
+                    {
+                      title: 'Rank',
+                      dataIndex: 'rank',
+                      width: 100,
+                      render: (rank) => <RankingBadge rank={rank} />
+                    },
+                    {
+                      title: 'Player',
+                      dataIndex: 'display_name',
+                      sorter: (a, b) => a.display_name.localeCompare(b.display_name),
+                      render: (value, record) => <PlayerCell name={value} userId={record.user_id} />
+                    },
+                    {
+                      title: 'Points',
+                      dataIndex: 'total_points',
+                      sorter: (a, b) => a.total_points - b.total_points,
+                      render: (value, record) => <PointsDisplay total={value} verified={record.verified_points} />
+                    },
+                    { title: 'Champion', dataIndex: 'champion_count' },
+                    { title: 'Swiss King', dataIndex: 'swiss_king_count' },
+                    { title: 'Match Wins', dataIndex: 'total_valid_wins' },
+                    {
+                      title: 'Tournaments',
+                      dataIndex: 'tournament_count',
+                      render: (value, record) => `${value || 0} (${record.approved_tournament_count || 0} verified)`
+                    },
+                    {
+                      title: 'Most Recent',
+                      dataIndex: 'most_recent_tournament_date',
+                      render: formatDate
+                    }
+                  ]}
+                />
+              </ResponsiveTableWrapper>
+            </div>
+          </>
+        )}
+      </Card>
     </div>
   );
 }
@@ -239,9 +308,7 @@ function PodiumCard({ player, rank, featured = false }) {
           <img src="/brand/zamboanga-pincers-logo.jpg" alt="" className="bbx-podium-logo" />
         </div>
         <div className="mt-3 text-center">
-          <div className="bbx-podium-player-name text-2xl font-black leading-tight text-bbx-ink">
-            {player.display_name}
-          </div>
+          <div className="bbx-podium-player-name text-2xl font-black leading-tight text-bbx-ink">{player.display_name}</div>
           <div className="stat-number mt-2 text-4xl font-black leading-none text-bbx-red">{player.total_points || 0}</div>
           <div className="text-xs font-black uppercase text-bbx-red">points</div>
           <div className="mt-1 text-xs font-semibold text-bbx-muted">{player.verified_points || 0} pts verified</div>
@@ -313,7 +380,7 @@ function currentManilaMonth() {
 
 function buildYearOptions(currentYear) {
   const startYear = Number(currentYear);
-  return Array.from({ length: 8 }, (_, index) => {
+  return Array.from({ length: 3 }, (_, index) => {
     const value = String(startYear - index);
     return { value, label: value };
   });

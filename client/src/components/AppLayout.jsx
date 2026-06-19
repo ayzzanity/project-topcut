@@ -1,4 +1,4 @@
-import { BarChartOutlined, FlagOutlined, ImportOutlined, LogoutOutlined, UserOutlined } from '@ant-design/icons';
+import { BarChartOutlined, FlagOutlined, UnorderedListOutlined, LogoutOutlined, UserOutlined } from '@ant-design/icons';
 import { Button, Layout } from 'antd';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
@@ -18,9 +18,9 @@ export default function AppLayout() {
       label: 'Leaderboard'
     },
     {
-      path: '/import',
-      icon: <ImportOutlined />,
-      label: 'Import Tournament'
+      path: '/tournaments',
+      icon: <UnorderedListOutlined />,
+      label: 'Tournaments'
     },
     {
       path: '/profile',
@@ -56,7 +56,7 @@ export default function AppLayout() {
 
         <nav className="bbx-sidebar-nav" aria-label="Primary navigation">
           {navItems.map((item) => {
-            const active = location.pathname === item.path;
+            const active = location.pathname === item.path || location.pathname.startsWith(`${item.path}/`);
 
             return (
               <Link

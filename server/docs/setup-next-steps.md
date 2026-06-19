@@ -129,12 +129,11 @@ The BBX `event_date` is derived from Challonge `start_at` / `started_at`, not
 `completed_at`. The migration backfills existing tournaments using Asia/Manila
 local time.
 
-## Placement points through 8th
+## Placement points
 
-Apply `supabase/migrations/202606160001_allow_5th_to_8th_placement_points.sql`.
+Apply `supabase/migrations/202606190001_remove_3rd_to_8th_placement_points.sql`.
 
-The backend awards 5th-8th place points only when Challonge provides a confirmed
-`final_rank` from 5 through 8.
+The backend awards placement points only for confirmed 1st and 2nd place.
 
 ## Swiss King points
 

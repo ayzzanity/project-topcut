@@ -2,6 +2,7 @@ import { CalendarOutlined, CrownOutlined, FireOutlined, RiseOutlined, TrophyOutl
 import { Alert, Button, Card, Empty, Modal, Spin, Table, Tag, Typography } from 'antd';
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import PageBreadcrumb from '../components/PageBreadcrumb.jsx';
 import ResponsiveTableWrapper from '../components/ResponsiveTableWrapper.jsx';
 import StatusTag from '../components/StatusTag.jsx';
 import { ErrorCard, LoadingCard } from '../components/StateCard.jsx';
@@ -137,6 +138,13 @@ export default function ProfilePage() {
 
   return (
     <div className="bbx-profile-page">
+      <PageBreadcrumb
+        items={[
+          { label: 'Profile', to: '/profile' },
+          { label: isOwnProfile ? 'My Profile' : displayName }
+        ]}
+      />
+
       <div className="bbx-profile-grid">
         <main className="min-w-0">
           <Card className="bbx-card bbx-profile-hero">

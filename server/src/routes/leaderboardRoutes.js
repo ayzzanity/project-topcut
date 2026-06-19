@@ -183,33 +183,26 @@ router.get('/players/:userId/history/:recordId', async (req, res, next) => {
     if (matchesError) throw matchesError;
 
     const sourceIds = [...new Set(matches.map((match) => match.source_id))];
-    const { data: sources, error: sourcesError } = sourceIds.length
+    const { data: participantRows, error: participantsError } = sourceIds.length
       ? await supabaseAdmin
-          .from('tournament_sources')
-          .select('id, challonge_url')
-          .in('id', sourceIds)
+          .from('tournament_participants')
+          .select('source_id, challonge_participant_id, name, raw_data')
+          .in('source_id', sourceIds)
       : { data: [], error: null };
 
-    if (sourcesError) throw sourcesError;
+    if (participantsError) throw participantsError;
 
-    const opponentNamesBySource = new Map();
-    await Promise.all(sources.map(async (source) => {
-      try {
-        const tournament = await fetchTournament(source.challonge_url);
-        const participantNames = new Map();
+    const opponentNamesBySource = participantRows.reduce((acc, participant) => {
+      const participantNames = acc.get(participant.source_id) || new Map();
+      participantNames.set(Number(participant.challonge_participant_id), participant.name);
 
-        for (const participant of tournament.participants) {
-          participantNames.set(Number(participant.id), participant.name);
-          for (const groupPlayerId of participant.group_player_ids || []) {
-            participantNames.set(Number(groupPlayerId), participant.name);
-          }
-        }
-
-        opponentNamesBySource.set(source.id, participantNames);
-      } catch (_error) {
-        opponentNamesBySource.set(source.id, new Map());
+      for (const groupPlayerId of participant.raw_data?.group_player_ids || []) {
+        participantNames.set(Number(groupPlayerId), participant.name);
       }
-    }));
+
+      acc.set(participant.source_id, participantNames);
+      return acc;
+    }, new Map());
 
     const pointBreakdown = buildCurrentPointBreakdown(record);
     const sortedMatches = [...matches].sort((a, b) =>
@@ -312,12 +305,6 @@ function buildCurrentPointBreakdown(record) {
 function placementPoints(finalPlacement) {
   if (finalPlacement === 1) return POINTS.champion;
   if (finalPlacement === 2) return POINTS.finisher;
-  if (finalPlacement === 3) return POINTS.thirdPlace;
-  if (finalPlacement === 4) return POINTS.fourthPlace;
-  if (finalPlacement === 5) return POINTS.fifthPlace;
-  if (finalPlacement === 6) return POINTS.sixthPlace;
-  if (finalPlacement === 7) return POINTS.seventhPlace;
-  if (finalPlacement === 8) return POINTS.eighthPlace;
   return 0;
 }
 
@@ -492,3 +479,5 @@ function compareDatesDesc(left, right) {
 }
 
 module.exports = router;
+
+

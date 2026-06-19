@@ -26,6 +26,7 @@ import {
   message
 } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
+import PageBreadcrumb from '../components/PageBreadcrumb.jsx';
 import ResponsiveTableWrapper from '../components/ResponsiveTableWrapper.jsx';
 import { EmptyCard, ErrorCard, LoadingCard } from '../components/StateCard.jsx';
 import StatusTag from '../components/StatusTag.jsx';
@@ -111,6 +112,8 @@ export default function AdminReviewPage() {
 
   return (
     <div className="bbx-admin-page">
+      <PageBreadcrumb items={[{ label: 'Admin Review' }]} />
+
       <div className="mb-5 flex justify-end">
         <Button className="bbx-outline-button" icon={<ReloadOutlined />} onClick={loadReviewData}>
           Refresh
