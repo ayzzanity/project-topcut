@@ -5,17 +5,12 @@ const { fetchTournament } = require('../services/challongeService');
 const { POINTS } = require('../services/scoringService');
 
 const router = express.Router();
+const VISIBLE_RECORD_STATUSES = ['pending_review', 'approved'];
+const VISIBLE_TOURNAMENT_STATUSES = ['pending_review', 'approved'];
 
 router.get('/', async (_req, res, next) => {
   try {
-    const { data, error } = await supabaseAdmin
-      .from('leaderboard')
-      .select('*')
-      .limit(100);
-
-    if (error) throw error;
-
-    res.json({ data });
+    res.json({ data: await buildLeaderboard({ limit: 100 }) });
   } catch (error) {
     next(error);
   }
@@ -29,7 +24,7 @@ router.get('/monthly', async (_req, res, next) => {
       month: '2-digit'
     }).format(new Date());
     const [year, month] = currentMonth.split('-');
-    res.json({ data: await buildPeriodLeaderboard({ year, month }) });
+    res.json({ data: await buildLeaderboard({ year, month }) });
   } catch (error) {
     next(error);
   }
@@ -44,7 +39,7 @@ router.get('/filtered', async (req, res, next) => {
       throw new AppError(400, 'leaderboard_year_required', 'A year is required when filtering by month.');
     }
 
-    const data = await buildPeriodLeaderboard({ year, month });
+    const data = await buildLeaderboard({ year, month });
     res.json({ data });
   } catch (error) {
     next(error);
@@ -53,20 +48,22 @@ router.get('/filtered', async (req, res, next) => {
 
 router.get('/players/:userId/stats', async (req, res, next) => {
   try {
-    const { data: stats, error } = await supabaseAdmin
-      .from('player_profile_stats')
-      .select('*')
-      .eq('user_id', req.params.userId)
-      .single();
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .select('id, display_name')
+      .eq('id', req.params.userId)
+      .maybeSingle();
 
-    if (error) throw error;
+    if (profileError) throw profileError;
 
     const { data: records, error: recordsError } = await supabaseAdmin
       .from('player_tournament_records')
-      .select('id, tournaments!inner(status)')
+      .select(
+        'id, status, total_points, valid_wins, final_placement, is_swiss_king, tournaments!inner(event_date, status)'
+      )
       .eq('user_id', req.params.userId)
-      .eq('status', 'approved')
-      .eq('tournaments.status', 'approved');
+      .in('status', VISIBLE_RECORD_STATUSES)
+      .in('tournaments.status', VISIBLE_TOURNAMENT_STATUSES);
 
     if (recordsError) throw recordsError;
 
@@ -79,6 +76,8 @@ router.get('/players/:userId/stats', async (req, res, next) => {
       : { count: 0, error: null };
 
     if (matchesError) throw matchesError;
+
+    const stats = buildPlayerStats(profile, records);
 
     res.json({
       data: {
@@ -99,8 +98,8 @@ router.get('/players/:userId/history', async (req, res, next) => {
         'id, player_name, swiss_wins, is_swiss_king, final_placement, total_points, status, created_at, tournaments!inner(name, event_date, status)'
       )
       .eq('user_id', req.params.userId)
-      .eq('status', 'approved')
-      .eq('tournaments.status', 'approved')
+      .in('status', VISIBLE_RECORD_STATUSES)
+      .in('tournaments.status', VISIBLE_TOURNAMENT_STATUSES)
       .order('event_date', { foreignTable: 'tournaments', ascending: false, nullsFirst: false })
       .order('created_at', { ascending: false })
       .limit(20);
@@ -146,6 +145,7 @@ router.get('/players/:userId/history', async (req, res, next) => {
           isSwissKing: record.is_swiss_king,
           final_placement: record.final_placement,
           total_points: record.total_points,
+          verified_points: isVerifiedRecord(record) ? record.total_points : 0,
           status: record.status
         };
       })
@@ -164,13 +164,13 @@ router.get('/players/:userId/history/:recordId', async (req, res, next) => {
       )
       .eq('id', req.params.recordId)
       .eq('user_id', req.params.userId)
-      .eq('status', 'approved')
-      .eq('tournaments.status', 'approved')
+      .in('status', VISIBLE_RECORD_STATUSES)
+      .in('tournaments.status', VISIBLE_TOURNAMENT_STATUSES)
       .maybeSingle();
 
     if (error) throw error;
     if (!record) {
-      throw new AppError(404, 'history_record_not_found', 'This verified tournament record was not found.');
+      throw new AppError(404, 'history_record_not_found', 'This tournament record was not found.');
     }
 
     const { data: matches, error: matchesError } = await supabaseAdmin
@@ -240,6 +240,8 @@ router.get('/players/:userId/history/:recordId', async (req, res, next) => {
         isSwissKing: record.is_swiss_king,
         finalPlacement: record.final_placement,
         totalPoints: record.total_points,
+        verifiedPoints: isVerifiedRecord(record) ? record.total_points : 0,
+        status: record.status,
         pointBreakdown,
         matches: sortedMatches.map((match) => ({
           id: match.id,
@@ -319,14 +321,14 @@ function placementPoints(finalPlacement) {
   return 0;
 }
 
-async function buildPeriodLeaderboard({ year = null, month = null }) {
+async function buildLeaderboard({ year = null, month = null, limit = null }) {
   const { data, error } = await supabaseAdmin
     .from('player_tournament_records')
     .select(
-      'user_id, total_points, valid_wins, final_placement, is_swiss_king, tournaments!inner(event_date, status)'
+      'user_id, status, total_points, valid_wins, final_placement, is_swiss_king, tournaments!inner(event_date, status)'
     )
-    .eq('status', 'approved')
-    .eq('tournaments.status', 'approved')
+    .in('status', VISIBLE_RECORD_STATUSES)
+    .in('tournaments.status', VISIBLE_TOURNAMENT_STATUSES)
     .not('tournaments.event_date', 'is', null);
 
   if (error) throw error;
@@ -347,31 +349,47 @@ async function buildPeriodLeaderboard({ year = null, month = null }) {
       user_id: record.user_id,
       display_name: profilesById.get(record.user_id)?.display_name || 'BBX Player',
       total_points: 0,
+      verified_points: 0,
       champion_count: 0,
       swiss_king_count: 0,
       finisher_count: 0,
       total_valid_wins: 0,
+      tournament_count: 0,
       approved_tournament_count: 0,
+      pending_tournament_count: 0,
+      most_recent_tournament_date: null,
       most_recent_approved_tournament_date: null
     };
 
+    const verified = isVerifiedRecord(record);
+
     row.total_points += record.total_points || 0;
     row.total_valid_wins += record.valid_wins || 0;
-    row.approved_tournament_count += 1;
+    row.tournament_count += 1;
+    if (verified) {
+      row.verified_points += record.total_points || 0;
+      row.approved_tournament_count += 1;
+    } else {
+      row.pending_tournament_count += 1;
+    }
     if (record.final_placement === 1) row.champion_count += 1;
     if (record.final_placement === 2) row.finisher_count += 1;
     if (record.is_swiss_king) row.swiss_king_count += 1;
 
     const eventDate = record.tournaments?.event_date || null;
-    if (!row.most_recent_approved_tournament_date || eventDate > row.most_recent_approved_tournament_date) {
+    if (!row.most_recent_tournament_date || eventDate > row.most_recent_tournament_date) {
+      row.most_recent_tournament_date = eventDate;
+    }
+    if (verified && (!row.most_recent_approved_tournament_date || eventDate > row.most_recent_approved_tournament_date)) {
       row.most_recent_approved_tournament_date = eventDate;
     }
 
     rowsByUser.set(record.user_id, row);
   }
 
-  return [...rowsByUser.values()].sort((a, b) =>
+  const sortedRows = [...rowsByUser.values()].sort((a, b) =>
     b.total_points - a.total_points
+    || b.verified_points - a.verified_points
     || b.champion_count - a.champion_count
     || b.swiss_king_count - a.swiss_king_count
     || b.finisher_count - a.finisher_count
@@ -379,6 +397,66 @@ async function buildPeriodLeaderboard({ year = null, month = null }) {
     || compareDatesDesc(a.most_recent_approved_tournament_date, b.most_recent_approved_tournament_date)
     || a.display_name.localeCompare(b.display_name)
   );
+
+  return limit ? sortedRows.slice(0, limit) : sortedRows;
+}
+
+function buildPlayerStats(profile, records) {
+  const stats = {
+    user_id: profile?.id || null,
+    display_name: profile?.display_name || 'BBX Player',
+    total_points: 0,
+    verified_points: 0,
+    tournament_count: 0,
+    approved_tournament_count: 0,
+    pending_tournament_count: 0,
+    champion_count: 0,
+    finisher_count: 0,
+    third_place_count: 0,
+    fourth_place_count: 0,
+    podium_finish_count: 0,
+    swiss_king_count: 0,
+    total_valid_wins: 0,
+    most_recent_tournament_date: null,
+    most_recent_approved_tournament_date: null
+  };
+
+  for (const record of records) {
+    const verified = isVerifiedRecord(record);
+    const eventDate = record.tournaments?.event_date || null;
+
+    stats.total_points += record.total_points || 0;
+    stats.total_valid_wins += record.valid_wins || 0;
+    stats.tournament_count += 1;
+
+    if (verified) {
+      stats.verified_points += record.total_points || 0;
+      stats.approved_tournament_count += 1;
+    } else {
+      stats.pending_tournament_count += 1;
+    }
+
+    if (record.final_placement === 1) stats.champion_count += 1;
+    if (record.final_placement === 2) stats.finisher_count += 1;
+    if (record.final_placement === 3) stats.third_place_count += 1;
+    if (record.final_placement === 4) stats.fourth_place_count += 1;
+    if ([1, 2, 3].includes(record.final_placement)) stats.podium_finish_count += 1;
+    if (record.is_swiss_king) stats.swiss_king_count += 1;
+
+    if (!stats.most_recent_tournament_date || eventDate > stats.most_recent_tournament_date) {
+      stats.most_recent_tournament_date = eventDate;
+    }
+
+    if (verified && (!stats.most_recent_approved_tournament_date || eventDate > stats.most_recent_approved_tournament_date)) {
+      stats.most_recent_approved_tournament_date = eventDate;
+    }
+  }
+
+  return stats;
+}
+
+function isVerifiedRecord(record) {
+  return record.status === 'approved' && record.tournaments?.status === 'approved';
 }
 
 function matchesPeriod(eventDate, { year, month }) {

@@ -211,7 +211,7 @@ export default function ImportTournamentPage() {
           status="success"
           icon={<CheckCircleOutlined />}
           title="Import submitted for admin review"
-          subTitle={`This result is currently ${titleize(confirmation.status)} and will only reflect on the leaderboard and your profile after an admin verifies it.`}
+          subTitle={`This result is currently ${titleize(confirmation.status)}. It will appear on your profile and the leaderboard as unverified, then count as verified after admin review.`}
           extra={[
             <Button key="leaderboard" type="primary">
               <Link to="/leaderboard">View Leaderboard</Link>

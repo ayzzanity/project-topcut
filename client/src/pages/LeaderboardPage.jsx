@@ -155,7 +155,7 @@ export default function LeaderboardPage() {
       </section>
 
       {rows.length === 0 ? (
-        <EmptyCard description={`No verified tournament results found for ${summaryLabel.toLowerCase()}.`} />
+        <EmptyCard description={`No tournament results found for ${summaryLabel.toLowerCase()}.`} />
       ) : (
         <Card className="bbx-card bbx-leaderboard-table-card">
           <ResponsiveTableWrapper>
@@ -181,15 +181,19 @@ export default function LeaderboardPage() {
                   title: 'Points',
                   dataIndex: 'total_points',
                   sorter: (a, b) => a.total_points - b.total_points,
-                  render: (value) => <strong className="text-xl text-bbx-red">{value}</strong>
+                  render: (value, record) => <PointsDisplay total={value} verified={record.verified_points} />
                 },
                 { title: 'Champion', dataIndex: 'champion_count' },
                 { title: 'Swiss King', dataIndex: 'swiss_king_count' },
                 { title: 'Match Wins', dataIndex: 'total_valid_wins' },
-                { title: 'Verified Events', dataIndex: 'approved_tournament_count' },
+                {
+                  title: 'Events',
+                  dataIndex: 'tournament_count',
+                  render: (value, record) => `${value || 0} (${record.approved_tournament_count || 0} verified)`
+                },
                 {
                   title: 'Most Recent',
-                  dataIndex: 'most_recent_approved_tournament_date',
+                  dataIndex: 'most_recent_tournament_date',
                   render: formatDate
                 }
               ]}
@@ -219,7 +223,7 @@ function PodiumCard({ player, rank, featured = false }) {
           <MiniMetric icon={<TrophyOutlined />} label="Champion" value="-" />
           <MiniMetric icon={<CrownOutlined />} label="Swiss King" value="-" />
           <MiniMetric icon={<StarFilled />} label="Match Wins" value="-" />
-          <MiniMetric icon={<CalendarOutlined />} label="Verified Tournaments" value="-" />
+          <MiniMetric icon={<CalendarOutlined />} label="Tournaments" value="-" />
         </div>
       </Card>
     );
@@ -240,16 +244,26 @@ function PodiumCard({ player, rank, featured = false }) {
           </div>
           <div className="stat-number mt-2 text-4xl font-black leading-none text-bbx-red">{player.total_points || 0}</div>
           <div className="text-xs font-black uppercase text-bbx-red">points</div>
+          <div className="mt-1 text-xs font-semibold text-bbx-muted">{player.verified_points || 0} pts verified</div>
         </div>
 
         <div className="bbx-podium-metrics">
           <MiniMetric icon={<TrophyOutlined />} label="Champion" value={player?.champion_count ?? '-'} />
           <MiniMetric icon={<CrownOutlined />} label="Swiss King" value={player?.swiss_king_count ?? '-'} />
           <MiniMetric icon={<StarFilled />} label="Match Wins" value={player?.total_valid_wins ?? '-'} />
-          <MiniMetric icon={<CalendarOutlined />} label="Verified Tournaments" value={player?.approved_tournament_count ?? '-'} />
+          <MiniMetric icon={<CalendarOutlined />} label="Tournaments" value={player?.tournament_count ?? '-'} />
         </div>
       </Card>
     </Link>
+  );
+}
+
+function PointsDisplay({ total = 0, verified = 0 }) {
+  return (
+    <div>
+      <strong className="text-xl text-bbx-red">{total || 0}</strong>
+      <div className="text-xs font-semibold text-bbx-muted">({verified || 0} pts verified)</div>
+    </div>
   );
 }
 

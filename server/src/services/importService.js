@@ -580,13 +580,13 @@ function buildPointBreakdown({ swissWins, topCutEntry, isSwissKing, finalPlaceme
       key: 'top_cut_entry',
       label: 'Top Cut entry',
       value: topCutEntry ? 'Yes' : 'No',
-      points: topCutEntry ? 2 : 0
+      points: topCutEntry ? POINTS.topCutEntry : 0
     },
     {
       key: 'swiss_king',
       label: 'Swiss King',
       value: isSwissKing ? 'Yes' : 'No',
-      points: isSwissKing ? 8 : 0
+      points: isSwissKing ? POINTS.swissKing : 0
     },
     {
       key: 'final_placement',

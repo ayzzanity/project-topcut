@@ -3,6 +3,7 @@ import { Alert, Button, Card, Empty, Modal, Spin, Table, Tag, Typography } from 
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import ResponsiveTableWrapper from '../components/ResponsiveTableWrapper.jsx';
+import StatusTag from '../components/StatusTag.jsx';
 import { ErrorCard, LoadingCard } from '../components/StateCard.jsx';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { api } from '../lib/apiClient.js';
@@ -76,8 +77,11 @@ export default function ProfilePage() {
 
   const displayName = stats?.display_name || (isOwnProfile ? profile?.display_name : null) || 'BBX Player';
   const totalPoints = stats?.total_points || 0;
+  const verifiedPoints = stats?.verified_points || 0;
   const validWins = stats?.total_valid_wins || 0;
+  const totalEvents = stats?.tournament_count || 0;
   const verifiedEvents = stats?.approved_tournament_count || 0;
+  const pendingEvents = stats?.pending_tournament_count || 0;
   const podiumFinishCount =
     stats?.podium_finish_count ??
     (stats?.champion_count || 0) +
@@ -113,11 +117,15 @@ export default function ProfilePage() {
         </span>
       )
     },
-    { title: 'Points Earned', dataIndex: 'total_points' },
+    {
+      title: 'Points Earned',
+      dataIndex: 'total_points',
+      render: (value, record) => <PointsDisplay total={value} verified={record.verified_points} />
+    },
     {
       title: 'Status',
       dataIndex: 'status',
-      render: (value) => <Tag color="green">{value === 'approved' ? 'Verified' : value || 'Verified'}</Tag>
+      render: (value) => <StatusTag status={value} />
     },
     { title: 'Date', dataIndex: 'event_date', render: formatDate }
   ];
@@ -148,7 +156,7 @@ export default function ProfilePage() {
                   </Tag>
                 </div>
                 <p className="mt-3 max-w-xs text-sm leading-6 text-bbx-muted">
-                  Based on verified ZC Pincers tournament records.
+                  Includes submitted tournament records. Verified points are shown separately.
                 </p>
               </div>
             </div>
@@ -156,6 +164,7 @@ export default function ProfilePage() {
               <span className="bbx-profile-points-laurel" aria-hidden="true" />
               <div className="text-xs font-black uppercase text-bbx-muted">Total Points</div>
               <div className="bbx-profile-points-value stat-number">{totalPoints}</div>
+              <div className="text-xs font-semibold text-bbx-muted">({verifiedPoints} pts verified)</div>
             </div>
           </Card>
 
@@ -163,8 +172,8 @@ export default function ProfilePage() {
             <ProfileStat
               icon={<CalendarOutlined />}
               label="Tournaments Joined"
-              value={verifiedEvents}
-              hint="Verified Tournaments"
+              value={totalEvents}
+              hint={`${verifiedEvents} verified${pendingEvents ? `, ${pendingEvents} unverified` : ''}`}
             />
             <ProfileStat icon={<FireOutlined />} label="Total Match Wins" value={validWins} hint="Wins" />
             <ProfileStat
@@ -240,7 +249,7 @@ export default function ProfilePage() {
               <div>
                 <strong>{overallRank === 1 ? 'Top Local Player' : 'Keep Climbing'}</strong>
                 <p>
-                  {overallRank === 1 ? 'Keep competing to defend your rank.' : 'Submit verified results to climb the board.'}
+                  {overallRank === 1 ? 'Keep competing to defend your rank.' : 'Submit results to climb while admin review catches up.'}
                 </p>
               </div>
             </div>
@@ -319,9 +328,13 @@ function HistoryDetails({ details }) {
         <DetailSummaryItem label="Final Placement" value={formatPlacement(details.finalPlacement)} subtle />
         <DetailSummaryItem label="Top Cut" value={details.topCutEntry ? 'Entered' : 'Not entered'} />
         <DetailSummaryItem label="Swiss King" value={details.isSwissKing ? 'Yes' : 'No'} />
+        <DetailSummaryItem label="Status" value={<StatusTag status={details.status} />} />
         <div className="bbx-history-summary-total">
           <span>Total Points</span>
-          <strong>{details.totalPoints}</strong>
+          <strong>
+            {details.totalPoints}
+            <small> ({details.verifiedPoints || 0} pts verified)</small>
+          </strong>
         </div>
       </div>
 
@@ -393,6 +406,15 @@ function DetailSummaryItem({ label, value, subtle = false }) {
       <span>{label}</span>
       <strong className={subtle ? 'is-subtle' : ''}>{value}</strong>
     </div>
+  );
+}
+
+function PointsDisplay({ total = 0, verified = 0 }) {
+  return (
+    <span>
+      <strong>{total || 0}</strong>
+      <span className="ml-2 text-xs font-semibold text-bbx-muted">({verified || 0} pts verified)</span>
+    </span>
   );
 }
 

@@ -192,7 +192,7 @@ export default function AdminReviewPage() {
             className="mt-5"
             type="info"
             showIcon
-            message="Note: Only verified records are counted in leaderboards and player statistics."
+            message="Note: Pending records appear as unverified in leaderboards and profiles. Admin verification moves their points into the verified subtotal."
           />
         </>
       )}

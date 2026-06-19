@@ -6,6 +6,7 @@ const colorByStatus = {
   available: 'green',
   clean: 'green',
   pending: 'gold',
+  pending_review: 'gold',
   review: 'orange',
   needs_review: 'orange',
   warning: 'orange',
@@ -20,7 +21,7 @@ const colorByStatus = {
 export default function StatusTag({ status, children }) {
   const normalized = String(status || '').toLowerCase();
   const color = colorByStatus[normalized] || 'default';
-  const label = normalized === 'approved' ? 'Verified' : titleize(normalized);
+  const label = normalized === 'approved' ? 'Verified' : normalized === 'pending_review' ? 'Unverified' : titleize(normalized);
 
   return <Tag color={color}>{children || label}</Tag>;
 }
