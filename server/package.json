@@ -2,7 +2,7 @@
   "name": "project-bbx-backend",
   "version": "0.1.0",
   "private": true,
-  "description": "Backend foundation for Project Pincers local Beyblade rankings.",
+  "description": "Backend foundation for Project TOPCUT local Beyblade rankings.",
   "main": "src/server.js",
   "engines": {
     "node": ">=18"
@@ -25,4 +25,3 @@
     "zod": "^3.23.8"
   }
 }
-

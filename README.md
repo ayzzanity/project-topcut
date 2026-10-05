@@ -1,5 +1,6 @@
-# project-pincers-bbx
-Local BBX Leaderboard for ZC Pincers
+# project-topcut-bbx
+
+Local BBX Leaderboard for ZC Fallen Community and Affiliated Teams
 
 ## Backend on Vercel
 

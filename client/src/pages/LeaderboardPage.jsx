@@ -204,7 +204,6 @@ export default function LeaderboardPage() {
       </div>
 
       <Card className="bbx-card bbx-leaderboard-shell">
-
         {loading ? (
           <div className="flex min-h-40 items-center justify-center gap-3 py-8">
             <Spin />
@@ -305,7 +304,7 @@ function PodiumCard({ player, rank, featured = false }) {
         <div className="bbx-podium-logo-wrap">
           {featured ? <CrownOutlined className="bbx-podium-crown" /> : null}
           <span className={`bbx-podium-laurel rank-${rank}`} aria-hidden="true" />
-          <img src="/brand/zamboanga-pincers-logo.jpg" alt="" className="bbx-podium-logo" />
+          <img src="/brand/zamboanga-fallen-logo.jpg" alt="" className="bbx-podium-logo" />
         </div>
         <div className="mt-3 text-center">
           <div className="bbx-podium-player-name text-2xl font-black leading-tight text-bbx-ink">{player.display_name}</div>
@@ -349,7 +348,7 @@ function MiniMetric({ icon, label, value }) {
 function PlayerCell({ name, userId }) {
   return (
     <div className="flex items-center gap-3">
-      <img src="/brand/zamboanga-pincers-logo.jpg" alt="" className="h-9 w-9 rounded object-contain" />
+      <img src="/brand/zamboanga-fallen-logo.jpg" alt="" className="h-9 w-9 rounded object-contain" />
       <Link to={`/players/${userId}`} className="bbx-leaderboard-player-link font-black text-bbx-ink">
         {name}
       </Link>

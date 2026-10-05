@@ -1,4 +1,4 @@
-# Project Pincers Backend Foundation
+# Project TOPCUT Backend Foundation
 
 This backend treats one real Beyblade event as one `tournaments` row. Challonge links are saved as `tournament_sources`; a required `main` source feeds Swiss data, and an optional `top_cut` source becomes the authoritative Top Cut / Final Stage source.
 

@@ -1,4 +1,4 @@
-# Project Pincers Client
+# Project TOPCUT Client
 
 MVP React frontend for Local Beyblade Rankings.
 

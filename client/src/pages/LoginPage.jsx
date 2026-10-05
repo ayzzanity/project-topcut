@@ -61,13 +61,13 @@ export default function LoginPage() {
         <Card className="bbx-login-card w-full" bordered>
           <div className="mb-6 flex items-center gap-4">
             <img
-              src="/brand/zamboanga-pincers-logo.jpg"
-              alt="Zamboanga Pincers logo"
+              src="/brand/zamboanga-fallen-logo.jpg"
+              alt="Zamboanga Fallen logo"
               className="h-16 w-16 shrink-0 object-contain sm:h-20 sm:w-20"
             />
             <div className="min-w-0">
               <Typography.Title level={1} className="bbx-login-brand-title">
-                PROJECT PINCERS
+                PROJECT TOPCUT
               </Typography.Title>
               <div className="mt-2 text-base font-black uppercase tracking-normal text-bbx-red sm:text-xl">
                 Zamboanga BBX Rankings
@@ -148,7 +148,7 @@ export default function LoginPage() {
           </div>
 
           <div className="text-center text-base text-bbx-muted">
-            {mode === 'login' ? 'New to Project Pincers?' : 'Already have an account?'}
+            {mode === 'login' ? 'New to PROJECT TOPCUT?' : 'Already have an account?'}
             <button
               className="ml-3 font-bold text-bbx-red"
               type="button"
@@ -166,7 +166,7 @@ export default function LoginPage() {
           <span className="text-bbx-red">•</span>
           <span>Private</span>
           <span className="text-bbx-red">•</span>
-          <span>Built for Zamboanga Pincers</span>
+          <span>Built for Zamboanga Fallen</span>
         </div>
       </main>
     </div>

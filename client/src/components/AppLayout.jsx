@@ -47,9 +47,9 @@ export default function AppLayout() {
     <Layout className="min-h-screen">
       <Sider width={300} breakpoint="lg" collapsedWidth="0" className="bbx-app-sider border-r border-bbx-line bg-white">
         <div className="bbx-sidebar-brand">
-          <img src="/brand/zamboanga-pincers-logo.jpg" alt="Zamboanga Pincers logo" className="bbx-sidebar-brand-logo" />
+          <img src="/brand/zamboanga-fallen-logo.jpg" alt="Zamboanga Fallen logo" className="bbx-sidebar-brand-logo" />
           <div className="min-w-0">
-            <div className="brand-title bbx-sidebar-brand-title">PROJECT PINCERS</div>
+            <div className="brand-title bbx-sidebar-brand-title">PROJECT TOPCUT</div>
             <div className="bbx-sidebar-brand-subtitle">ZC BBX LOCAL RANKINGS</div>
           </div>
         </div>

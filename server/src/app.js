@@ -16,7 +16,7 @@ app.use(express.json({ limit: '1mb' }));
 app.get('/', (_req, res) => {
   res.json({
     data: {
-      name: 'Project Pincers Backend',
+      name: 'Project TOPCUT Backend',
       ok: true,
       endpoints: {
         health: '/health',

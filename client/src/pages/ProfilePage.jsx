@@ -138,18 +138,13 @@ export default function ProfilePage() {
 
   return (
     <div className="bbx-profile-page">
-      <PageBreadcrumb
-        items={[
-          { label: 'Profile', to: '/profile' },
-          { label: isOwnProfile ? 'My Profile' : displayName }
-        ]}
-      />
+      <PageBreadcrumb items={[{ label: 'Profile', to: '/profile' }, { label: isOwnProfile ? 'My Profile' : displayName }]} />
 
       <div className="bbx-profile-grid">
         <main className="min-w-0">
           <Card className="bbx-card bbx-profile-hero">
             <div className="bbx-profile-player">
-              <img src="/brand/zamboanga-pincers-logo.jpg" alt="" className="bbx-profile-avatar" />
+              <img src="/brand/zamboanga-fallen-logo.jpg" alt="" className="bbx-profile-avatar" />
               <div>
                 <Typography.Title level={2} className="m-0 text-bbx-ink">
                   {displayName}
@@ -257,7 +252,9 @@ export default function ProfilePage() {
               <div>
                 <strong>{overallRank === 1 ? 'Top Local Player' : 'Keep Climbing'}</strong>
                 <p>
-                  {overallRank === 1 ? 'Keep competing to defend your rank.' : 'Submit results to climb while admin review catches up.'}
+                  {overallRank === 1
+                    ? 'Keep competing to defend your rank.'
+                    : 'Submit results to climb while admin review catches up.'}
                 </p>
               </div>
             </div>
